@@ -1,0 +1,100 @@
+version: '3.8'
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  FraudGuard — Real-Time Credit Card Fraud Detection
+#  Real Dataset: Credit Card Fraud Detection (284,807 transactions, 0.17% fraud)
+#
+#  Run order:
+#    1. python data/download_dataset.py      (downloads real dataset)
+#    2. python training/train.py             (trains on real data)
+#    3. docker compose up --build            (starts full stack)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: fg_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: fg_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG4J_LOGGERS: "kafka=WARN,kafka.controller=WARN,state.change.logger=WARN"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  mlflow:
+    build: ./mlflow
+    container_name: fg_mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_db:/mlflow
+      - ./mlartifacts:/mlartifacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  api:
+    build: ./api
+    container_name: fg_api
+    ports:
+      - "8000:8000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      MODEL_PATH: /mlartifacts/production
+      FRAUD_THRESHOLD: "0.45"
+    volumes:
+      - ./mlartifacts:/mlartifacts
+    restart: on-failure
+
+  producer:
+    build: ./producer
+    container_name: fg_producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATA_PATH: /data/creditcard.csv
+    volumes:
+      - ./data:/data:ro
+    restart: on-failure
+
+  consumer:
+    build: ./consumer
+    container_name: fg_consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      API_URL: http://api:8000/predict
+    restart: on-failure
+
+volumes:
+  mlflow_db:

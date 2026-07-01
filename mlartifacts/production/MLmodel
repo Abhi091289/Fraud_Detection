@@ -1,0 +1,3 @@
+flavors:
+  sklearn:
+    pickled_model: pipeline.pkl

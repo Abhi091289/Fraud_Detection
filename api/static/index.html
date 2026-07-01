@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FraudGuard — Real-Time Detection Dashboard</title>
+<style>
+:root {
+  --bg:       #07090f;
+  --bg1:      #0d1117;
+  --bg2:      #111827;
+  --border:   #1f2937;
+  --border2:  #374151;
+  --text:     #f3f4f6;
+  --muted:    #6b7280;
+  --dim:      #9ca3af;
+  --blue:     #3b82f6;
+  --purple:   #8b5cf6;
+  --green:    #10b981;
+  --red:      #ef4444;
+  --amber:    #f59e0b;
+  --red-bg:   rgba(239,68,68,0.08);
+  --red-bdr:  rgba(239,68,68,0.25);
+  --green-bg: rgba(16,185,129,0.08);
+  --green-bdr:rgba(16,185,129,0.25);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── Header ── */
+.hdr{height:60px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:17px}
+.logo-name{font-size:17px;font-weight:700;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-tag{font-size:10px;color:var(--muted);margin-top:-2px}
+.conn{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s infinite}
+.dot.err{background:var(--red);box-shadow:0 0 6px var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── Stats bar ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 24px;background:var(--bg1);border-bottom:1px solid var(--border)}
+.sc{padding:14px 18px;background:var(--bg);border:1px solid var(--border);border-radius:12px;text-align:center}
+.sv{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.sl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
+.sc.fr .sv{color:var(--red)}
+.sc.gn .sv{color:var(--green)}
+.sc.bl .sv{color:var(--blue)}
+
+/* ── Layout ── */
+.wrap{display:grid;grid-template-columns:1fr 380px;gap:16px;padding:16px 24px;max-width:1440px;margin:0 auto}
+
+/* ── Card ── */
+.card{background:var(--bg1);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.ch{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.ct{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.live-badge{font-size:10px;padding:2px 7px;border-radius:20px;background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.3);font-weight:500}
+.ch-right{font-size:11px;color:var(--muted)}
+
+/* ── Feed table ── */
+.feed-wrap{height:460px;overflow-y:auto}
+.feed-wrap::-webkit-scrollbar{width:3px}
+.feed-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:9px 16px;text-align:left;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
+td{padding:9px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);font-variant-numeric:tabular-nums;vertical-align:middle}
+tr.fr-row{background:var(--red-bg)}
+tr.fr-row:hover,tr:hover{background:var(--bg2)}
+tr.new-row{animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Probability badge */
+.pb{display:inline-flex;align-items:center;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:600}
+.pb-hi{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+.pb-md{background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.3)}
+.pb-lo{background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3)}
+
+/* Accuracy row */
+.acc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 16px}
+.acc-cell{text-align:center;padding:10px 6px;border-radius:8px;border:1px solid var(--border)}
+.acc-val{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.acc-lbl{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.acc-cell.tp{border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.05)}
+.acc-cell.tp .acc-val{color:var(--green)}
+.acc-cell.tn{border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.05)}
+.acc-cell.tn .acc-val{color:var(--blue)}
+.acc-cell.fp{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.05)}
+.acc-cell.fp .acc-val{color:var(--amber)}
+.acc-cell.fn{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.05)}
+.acc-cell.fn .acc-val{color:var(--red)}
+
+/* Right column */
+.rcol{display:flex;flex-direction:column;gap:16px}
+
+/* Alerts */
+.alerts{padding:10px;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.alerts::-webkit-scrollbar{width:3px}
+.alerts::-webkit-scrollbar-thumb{background:var(--border2)}
+.al{padding:10px 12px;background:var(--red-bg);border:1px solid var(--red-bdr);border-radius:9px;animation:pop .25s ease}
+@keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+.al-top{display:flex;justify-content:space-between;margin-bottom:4px}
+.al-id{font-size:10px;font-family:monospace;color:var(--muted)}
+.al-pct{font-size:12px;font-weight:700;color:#f87171}
+.al-amt{font-size:18px;font-weight:700}
+.al-meta{font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:12px}
+.al-tag{font-size:10px;padding:1px 6px;border-radius:4px}
+.al-tag.tp{background:rgba(16,185,129,.15);color:#34d399}
+.al-tag.fn{background:rgba(239,68,68,.15);color:#f87171}
+
+/* Empty state */
+.empty{text-align:center;padding:32px 16px;color:var(--muted)}
+.empty-icon{font-size:28px;margin-bottom:8px}
+.empty-txt{font-size:12px;line-height:1.6}
+
+/* ── Test panel ── */
+.tp{padding:14px}
+.tp-sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+.scen-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+.scen{padding:9px 11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;text-align:left;transition:all .15s;color:var(--text)}
+.scen:hover{border-color:var(--blue);background:rgba(59,130,246,.05)}
+.scen.fraud-s:hover{border-color:var(--red);background:var(--red-bg)}
+.scen.sel{border-color:var(--blue)!important;background:rgba(59,130,246,.08)}
+.scen-name{font-size:11px;font-weight:600;margin-bottom:2px}
+.scen-desc{font-size:10px;color:var(--muted)}
+.field{margin-bottom:10px}
+.field label{font-size:11px;color:var(--muted);display:block;margin-bottom:5px}
+.inp{width:100%;padding:8px 11px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px}
+.inp:focus{outline:none;border-color:var(--blue)}
+.btn-score{width:100%;padding:10px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn-score:hover{opacity:.9}
+.btn-score:disabled{opacity:.5;cursor:not-allowed}
+.result{margin-top:10px;padding:11px;border-radius:8px;display:none}
+.result.show{display:block}
+.result.fraud{background:var(--red-bg);border:1px solid var(--red-bdr)}
+.result.safe{background:var(--green-bg);border:1px solid var(--green-bdr)}
+.r-verdict{font-size:15px;font-weight:700;margin-bottom:5px}
+.r-detail{font-size:11px;color:var(--dim);line-height:1.7}
+
+/* Clear button */
+.clr-btn{font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px}
+.clr-btn:hover{color:var(--text);background:var(--border)}
+
+/* Precision/Recall bar */
+.pr-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 12px}
+.pr-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px}
+.pr-val{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.pr-lbl{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.05em}
+</style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────────────────── -->
+<header class="hdr">
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div>
+      <div class="logo-name">FraudGuard</div>
+      <div class="logo-tag">Credit Card Fraud Detection · Real Dataset</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:20px">
+    <div id="modelInfo" style="font-size:12px;color:var(--muted)">Loading model...</div>
+    <div class="conn">
+      <div class="dot" id="dot"></div>
+      <span id="connTxt">Connecting...</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── Stats ─────────────────────────────────────────────────────── -->
+<div class="stats">
+  <div class="sc">
+    <div class="sv" id="sTotal">0</div>
+    <div class="sl">Transactions</div>
+  </div>
+  <div class="sc fr">
+    <div class="sv" id="sFraud">0</div>
+    <div class="sl">Fraud Detected</div>
+  </div>
+  <div class="sc gn">
+    <div class="sv" id="sRate">0.00%</div>
+    <div class="sl">Fraud Rate</div>
+  </div>
+  <div class="sc bl">
+    <div class="sv" id="sLat">—</div>
+    <div class="sl">Avg Latency (ms)</div>
+  </div>
+</div>
+
+<!-- ── Main layout ────────────────────────────────────────────────── -->
+<div class="wrap">
+
+  <!-- Left: Live Feed + Accuracy -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- Live Transaction Feed -->
+    <div class="card">
+      <div class="ch">
+        <div class="ct">📡 Live Transaction Feed <span class="live-badge">LIVE</span></div>
+        <div class="ch-right" id="feedCount">0 transactions</div>
+      </div>
+      <div class="feed-wrap" id="feedWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Transaction ID</th>
+              <th>Amount</th>
+              <th>Fraud Score</th>
+              <th>Verdict</th>
+              <th>True Label</th>
+              <th>Latency</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="feedBody"></tbody>
+        </table>
+        <div id="feedEmpty" class="empty">
+          <div class="empty-icon">📡</div>
+          <div class="empty-txt">Waiting for transactions...<br>Make sure Docker is running.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-Time Model Accuracy -->
+    <div class="card">
+      <div class="ch">
+        <div class="ct">📊 Live Model Accuracy</div>
+        <div class="ch-right">Compared against real dataset labels</div>
+      </div>
+      <div class="acc-grid">
+        <div class="acc-cell tp">
+          <div class="acc-val" id="aTP">0</div>
+          <div class="acc-lbl">True Positive</div>
+        </div>
+        <div class="acc-cell tn">
+          <div class="acc-val" id="aTN">0</div>
+          <div class="acc-lbl">True Negative</div>
+        </div>
+        <div class="acc-cell fp">
+          <div class="acc-val" id="aFP">0</div>
+          <div class="acc-lbl">False Positive</div>
+        </div>
+        <div class="acc-cell fn">
+          <div class="acc-val" id="aFN">0</div>
+          <div class="acc-lbl">False Negative</div>
+        </div>
+      </div>
+      <div class="pr-row">
+        <div class="pr-item">
+          <div class="pr-val" id="prec" style="color:var(--green)">—</div>
+          <div class="pr-lbl">Precision</div>
+        </div>
+        <div class="pr-item">
+          <div class="pr-val" id="rec" style="color:var(--blue)">—</div>
+          <div class="pr-lbl">Recall</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right column -->
+  <div class="rcol">
+
+    <!-- Fraud Alerts -->
+    <div class="card">
+      <div class="ch">
+        <div class="ct">🚨 Fraud Alerts
+          <span id="alertBadge" style="font-size:10px;padding:2px 7px;border-radius:20px;background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.3)">0</span>
+        </div>
+        <button class="clr-btn" onclick="clearAlerts()">Clear</button>
+      </div>
+      <div class="alerts" id="alertsCont">
+        <div id="alertsEmpty" class="empty">
+          <div class="empty-icon">✅</div>
+          <div class="empty-txt">No fraud detected yet.<br>System is monitoring.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test a Transaction -->
+    <div class="card">
+      <div class="ch">
+        <div class="ct">🧪 Test a Transaction</div>
+        <div class="ch-right">Manual scoring</div>
+      </div>
+      <div class="tp">
+        <div class="tp-sub">Select a real-world scenario:</div>
+        <div class="scen-grid">
+          <button class="scen fraud-s" onclick="pick('midnight_atm',this)">
+            <div class="scen-name">🌙 Midnight ATM</div>
+            <div class="scen-desc">Late-night high risk</div>
+          </button>
+          <button class="scen fraud-s" onclick="pick('card_cloning',this)">
+            <div class="scen-name">💳 Card Cloning</div>
+            <div class="scen-desc">Stolen card pattern</div>
+          </button>
+          <button class="scen" onclick="pick('grocery',this)">
+            <div class="scen-name">🛒 Grocery Store</div>
+            <div class="scen-desc">Normal purchase</div>
+          </button>
+          <button class="scen" onclick="pick('coffee',this)">
+            <div class="scen-name">☕ Coffee Shop</div>
+            <div class="scen-desc">Small daily spend</div>
+          </button>
+          <button class="scen fraud-s" onclick="pick('overseas',this)">
+            <div class="scen-name">✈️ Overseas Fraud</div>
+            <div class="scen-desc">Foreign high-value</div>
+          </button>
+          <button class="scen" onclick="pick('salary',this)">
+            <div class="scen-name">💼 Salary Day</div>
+            <div class="scen-desc">Regular large transfer</div>
+          </button>
+        </div>
+        <div class="field">
+          <label>Transaction Amount ($)</label>
+          <input type="number" class="inp" id="testAmt" value="150.00" min="0.01" step="0.01">
+        </div>
+        <button class="btn-score" id="scoreBtn" onclick="runTest()">
+          ⚡ Score This Transaction
+        </button>
+        <div class="result" id="testResult">
+          <div class="r-verdict" id="rVerdict"></div>
+          <div class="r-detail" id="rDetail"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  FraudGuard Dashboard — Real-Time Fraud Detection UI
+// ═══════════════════════════════════════════════════════════════════
+
+// ── State ───────────────────────────────────────────────────────────
+const S = { total:0, fraud:0, latSum:0, latN:0, tp:0, tn:0, fp:0, fn:0, alerts:0, rows:0 };
+let   selectedScenario = null;
+let   selectedBtn      = null;
+
+// ── Preset Scenarios ─────────────────────────────────────────────────
+// Feature vectors derived from real Credit Card Fraud dataset statistics
+// Fraud rows: V1≈-4.77, V3≈-7.03, V4≈4.54, V14≈-7.07 are key indicators
+const SCENARIOS = {
+  midnight_atm: {
+    name:"Midnight ATM Withdrawal",
+    amount:299.99,
+    f:{V1:-3.04,V2:-3.16,V3:-7.00,V4:4.46,V5:-2.13,V6:-1.33,V7:-4.65,V8:.55,
+       V9:-2.22,V10:-4.53,V11:2.78,V12:-8.71,V13:.37,V14:-8.93,V15:-.24,
+       V16:-3.25,V17:-7.79,V18:-2.32,V19:.47,V20:-.27,V21:-.35,V22:.26,
+       V23:.02,V24:.57,V25:.27,V26:-.24,V27:-.17,V28:-.09}
+  },
+  card_cloning: {
+    name:"Card Cloning Pattern",
+    amount:2125.87,
+    f:{V1:-1.36,V2:-.07,V3:2.54,V4:1.38,V5:-.34,V6:.46,V7:.24,V8:.10,
+       V9:.36,V10:.09,V11:-.55,V12:-.62,V13:-.99,V14:-.31,V15:1.47,
+       V16:-.47,V17:.21,V18:.03,V19:.40,V20:.25,V21:-.02,V22:.28,
+       V23:-.11,V24:.07,V25:.13,V26:-.19,V27:.13,V28:-.02}
+  },
+  grocery: {
+    name:"Grocery Purchase",
+    amount:67.88,
+    f:{V1:1.19,V2:.26,V3:.17,V4:.45,V5:-.40,V6:.10,V7:.59,V8:.27,
+       V9:-.43,V10:.21,V11:-.08,V12:.11,V13:.06,V14:.29,V15:.77,
+       V16:.05,V17:-.11,V18:-.05,V19:.25,V20:-.21,V21:.01,V22:.27,
+       V23:.01,V24:.13,V25:.12,V26:.09,V27:.04,V28:.02}
+  },
+  coffee: {
+    name:"Coffee Shop",
+    amount:4.99,
+    f:{V1:2.31,V2:.08,V3:.99,V4:.03,V5:.25,V6:-.17,V7:.08,V8:.07,
+       V9:.37,V10:.03,V11:.47,V12:-.01,V13:.30,V14:-.03,V15:-.17,
+       V16:.29,V17:-.11,V18:.08,V19:.17,V20:.01,V21:-.01,V22:.11,
+       V23:.02,V24:.07,V25:-.05,V26:.04,V27:.01,V28:.00}
+  },
+  overseas: {
+    name:"Overseas Fraud Pattern",
+    amount:4850.00,
+    f:{V1:-5.91,V2:3.44,V3:-9.19,V4:5.78,V5:-1.16,V6:-1.17,V7:-3.82,V8:-.18,
+       V9:-1.53,V10:-5.74,V11:4.05,V12:-11.20,V13:1.19,V14:-11.09,V15:-.84,
+       V16:-2.52,V17:-6.84,V18:-2.27,V19:1.23,V20:.19,V21:-.44,V22:-.02,
+       V23:.26,V24:.52,V25:.32,V26:-.39,V27:-.16,V28:-.09}
+  },
+  salary: {
+    name:"Salary Day Transfer",
+    amount:1850.00,
+    f:{V1:-.97,V2:.33,V3:-.42,V4:.48,V5:.08,V6:.34,V7:-.13,V8:-.09,
+       V9:.16,V10:-.37,V11:.77,V12:-.09,V13:.11,V14:-.37,V15:.08,
+       V16:.11,V17:-.23,V18:.19,V19:-.26,V20:-.04,V21:.12,V22:.07,
+       V23:-.11,V24:.05,V25:.08,V26:.04,V27:.02,V28:.01}
+  }
+};
+
+// ── Scenario picker ──────────────────────────────────────────────────
+function pick(key, btn) {
+  selectedScenario = key;
+  if(selectedBtn){ selectedBtn.classList.remove('sel'); }
+  btn.classList.add('sel');
+  selectedBtn = btn;
+  document.getElementById('testAmt').value = SCENARIOS[key].amount.toFixed(2);
+  document.getElementById('testResult').className = 'result';
+}
+
+// ── Run manual test ──────────────────────────────────────────────────
+async function runTest() {
+  if(!selectedScenario){ alert('Please select a scenario first'); return; }
+  const btn = document.getElementById('scoreBtn');
+  btn.disabled = true; btn.textContent = '⏳ Scoring...';
+
+  const s   = SCENARIOS[selectedScenario];
+  const amt = parseFloat(document.getElementById('testAmt').value);
+  const features = { ...s.f, Amount: amt };
+
+  try {
+    const r = await fetch('/api/test', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ scenario: selectedScenario, features, amount: amt })
+    });
+    const data = await r.json();
+    const isFraud = data.is_fraud;
+    const pct = (data.fraud_probability * 100).toFixed(2);
+
+    const res = document.getElementById('testResult');
+    res.className = 'result show ' + (isFraud ? 'fraud' : 'safe');
+    document.getElementById('rVerdict').innerHTML =
+      isFraud ? `🚨 FRAUD DETECTED — ${s.name}` : `✅ SAFE TRANSACTION — ${s.name}`;
+    document.getElementById('rVerdict').style.color = isFraud ? 'var(--red)' : 'var(--green)';
+    document.getElementById('rDetail').innerHTML =
+      `Fraud Probability: <strong>${pct}%</strong> &nbsp;|&nbsp; ` +
+      `Threshold: ${(data.threshold_used*100).toFixed(0)}% &nbsp;|&nbsp; ` +
+      `Latency: ${data.latency_ms.toFixed(1)}ms &nbsp;|&nbsp; ` +
+      `Amount: $${amt.toFixed(2)}`;
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ Score This Transaction';
+  }
+}
+
+// ── Stats update ─────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('sTotal').textContent  = S.total.toLocaleString();
+  document.getElementById('sFraud').textContent  = S.fraud.toLocaleString();
+  document.getElementById('sRate').textContent   = S.total>0 ? (S.fraud/S.total*100).toFixed(2)+'%' : '0.00%';
+  document.getElementById('sLat').textContent    = S.latN>0 ? (S.latSum/S.latN).toFixed(1)+'ms' : '—';
+  document.getElementById('feedCount').textContent = S.rows.toLocaleString() + ' transactions';
+
+  // Accuracy metrics
+  document.getElementById('aTP').textContent = S.tp.toLocaleString();
+  document.getElementById('aTN').textContent = S.tn.toLocaleString();
+  document.getElementById('aFP').textContent = S.fp.toLocaleString();
+  document.getElementById('aFN').textContent = S.fn.toLocaleString();
+
+  const prec = (S.tp+S.fp)>0 ? S.tp/(S.tp+S.fp)*100 : 0;
+  const reca = (S.tp+S.fn)>0 ? S.tp/(S.tp+S.fn)*100 : 0;
+  document.getElementById('prec').textContent = (S.tp+S.fp)>0 ? prec.toFixed(1)+'%' : '—';
+  document.getElementById('rec').textContent  = (S.tp+S.fn)>0 ? reca.toFixed(1)+'%' : '—';
+}
+
+// ── Transaction handler ──────────────────────────────────────────────
+function handleTxn(txn) {
+  S.total++;
+  S.latSum += txn.latency_ms;
+  S.latN++;
+  if(txn.is_fraud) S.fraud++;
+
+  // Confusion matrix (only when true_label is known)
+  const tl = txn.true_label;
+  if(tl !== null && tl !== undefined) {
+    if     (txn.is_fraud && tl===1) S.tp++;
+    else if(!txn.is_fraud && tl===0) S.tn++;
+    else if(txn.is_fraud && tl===0) S.fp++;
+    else if(!txn.is_fraud && tl===1) S.fn++;
+  }
+
+  updateStats();
+  addRow(txn);
+  if(txn.is_fraud) addAlert(txn);
+  document.getElementById('feedEmpty').style.display = 'none';
+}
+
+// ── Feed row ─────────────────────────────────────────────────────────
+const MAX_ROWS = 100;
+
+function addRow(txn) {
+  S.rows = Math.min(S.rows+1, MAX_ROWS);
+  const p   = txn.fraud_probability;
+  const tl  = txn.true_label;
+  const tbody = document.getElementById('feedBody');
+
+  // Prob badge
+  let pbCls = 'pb-lo';
+  if(p > .7) pbCls = 'pb-hi';
+  else if(p > .4) pbCls = 'pb-md';
+
+  // True label display
+  let tlHtml = '<span style="color:var(--muted)">—</span>';
+  if(tl !== null && tl !== undefined){
+    if(txn.is_fraud && tl===1)   tlHtml = '<span style="color:var(--green);font-size:11px">✅ TP</span>';
+    else if(!txn.is_fraud && tl===0) tlHtml = '<span style="color:var(--blue);font-size:11px">✅ TN</span>';
+    else if(txn.is_fraud && tl===0)  tlHtml = '<span style="color:var(--amber);font-size:11px">⚠️ FP</span>';
+    else if(!txn.is_fraud && tl===1) tlHtml = '<span style="color:var(--red);font-size:11px">❌ FN</span>';
+  }
+
+  const tr = document.createElement('tr');
+  tr.className = 'new-row' + (txn.is_fraud ? ' fr-row' : '');
+  tr.innerHTML = `
+    <td style="font-family:monospace;font-size:11px;color:var(--muted)">${txn.transaction_id.substring(0,14)}…</td>
+    <td style="font-weight:600">$${parseFloat(txn.amount).toFixed(2)}</td>
+    <td><span class="pb ${pbCls}">${(p*100).toFixed(1)}%</span></td>
+    <td style="font-weight:600;color:${txn.is_fraud?'var(--red)':'var(--green)'}">
+      ${txn.is_fraud ? '🚨 FRAUD' : '✅ SAFE'}
+    </td>
+    <td>${tlHtml}</td>
+    <td style="color:var(--muted);font-size:11px">${txn.latency_ms.toFixed(1)}ms</td>
+    <td style="color:var(--muted);font-size:11px">${new Date().toLocaleTimeString()}</td>
+  `;
+  tbody.insertBefore(tr, tbody.firstChild);
+  while(tbody.children.length > MAX_ROWS) tbody.removeChild(tbody.lastChild);
+  document.getElementById('feedWrap').scrollTop = 0;
+}
+
+// ── Alert panel ───────────────────────────────────────────────────────
+function addAlert(txn) {
+  S.alerts++;
+  document.getElementById('alertBadge').textContent = S.alerts;
+  document.getElementById('alertsEmpty').style.display = 'none';
+
+  const tl  = txn.true_label;
+  let tagHtml = '';
+  if(tl !== null && tl !== undefined){
+    tagHtml = tl===1
+      ? '<span class="al-tag tp">Confirmed Fraud</span>'
+      : '<span class="al-tag fn">False Positive</span>';
+  }
+
+  const el = document.createElement('div');
+  el.className = 'al';
+  el.innerHTML = `
+    <div class="al-top">
+      <span class="al-id">${txn.transaction_id.substring(0,18)}…</span>
+      <span class="al-pct">🚨 ${(txn.fraud_probability*100).toFixed(1)}%</span>
+    </div>
+    <div class="al-amt">$${parseFloat(txn.amount).toFixed(2)} ${tagHtml}</div>
+    <div class="al-meta">
+      <span>${new Date().toLocaleTimeString()}</span>
+      <span>${txn.latency_ms.toFixed(1)}ms latency</span>
+    </div>
+  `;
+
+  const cont = document.getElementById('alertsCont');
+  cont.insertBefore(el, cont.firstChild);
+  while(cont.children.length > 21) cont.removeChild(cont.lastChild);
+}
+
+function clearAlerts() {
+  S.alerts = 0;
+  document.getElementById('alertBadge').textContent = '0';
+  document.getElementById('alertsCont').innerHTML = `
+    <div id="alertsEmpty" class="empty">
+      <div class="empty-icon">✅</div>
+      <div class="empty-txt">Cleared. System is monitoring.</div>
+    </div>`;
+}
+
+// ── SSE Connection ────────────────────────────────────────────────────
+let es;
+function connect() {
+  const dot = document.getElementById('dot');
+  const txt = document.getElementById('connTxt');
+  dot.className = 'dot';
+  txt.textContent = 'Connecting...';
+
+  es = new EventSource('/api/stream');
+
+  es.onopen = () => {
+    dot.className = 'dot ok';
+    txt.textContent = 'Connected — Monitoring';
+  };
+
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if(d.type === 'transaction') handleTxn(d);
+  };
+
+  es.onerror = () => {
+    dot.className = 'dot err';
+    txt.textContent = 'Reconnecting...';
+    es.close();
+    setTimeout(connect, 3000);
+  };
+}
+
+// ── Model info ────────────────────────────────────────────────────────
+async function loadInfo() {
+  try {
+    const r = await fetch('/health');
+    const d = await r.json();
+    const el = document.getElementById('modelInfo');
+    if(d.model_loaded){
+      el.textContent = `XGBoost + RobustScaler · Threshold ${(d.threshold*100).toFixed(0)}% · ${d.subscribers} viewer(s)`;
+      el.style.color = 'var(--green)';
+    } else {
+      el.textContent = 'Model not loaded — run training first';
+      el.style.color = 'var(--red)';
+    }
+  } catch(_){}
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+connect();
+loadInfo();
+setInterval(loadInfo, 20000);
+</script>
+</body>
+</html>
